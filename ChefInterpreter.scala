@@ -4,6 +4,7 @@ import scala.collection.mutable.{ HashMap }
 
 import jp.dai1741.parsing.chef.ChefOperations._
 import jp.dai1741.parsing.chef.ChefProps._
+import jp.dai1741.parsing.chef.ChefParsers
 
   
 // TODO: Implement, Support auxiliary recipe and verb loops
@@ -13,6 +14,13 @@ class ChefInterpreter {
   var ingredients = new HashMap[String, Ingredient]
   
   implicit def string2ingredient(s: String): Ingredient = ingredients(s)  // this is dangerous
+  
+  def exec(recipe: Recipe): Unit = exec(recipe.mainRecipe, recipe)
+  
+  def exec(curRecipe: PartialRecipe, recipe: Recipe): Unit = {
+    ingredients ++= curRecipe.ingreds.map { (i) ⇒ (i.name, i) }
+    for (expr <- curRecipe.operations) process(expr)
+  }
   
   def process(expr: Operation) = expr match {
     case FromFridge(ingred) ⇒ {
@@ -84,5 +92,13 @@ class ChefInterpreter {
     case Serve(num) ⇒ {
       dishes.showUntil(num)
     }
+  }
+}
+
+object ChefInterpreter {
+  def main(args: Array[String]) {
+    new ChefInterpreter().exec(
+      ChefParsers.parseRecipe(io.Source.fromFile(args(0), "UTF-8").getLines mkString "\n")
+    )
   }
 }
