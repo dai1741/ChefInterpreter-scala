@@ -22,7 +22,7 @@ class ChefParsers extends JavaTokenParsers {
   def 材料定義 = 材料名 ~ (("：" ~> 分量).? ^^ {
     _.getOrElse(new ~(None, None))
   }) <~ "\n" ^^ { case (name ~ (amount ~ iType)) ⇒
-    (name → Ingredient(iType.getOrElse(dry), amount.getOrElse(-1), amount.isDefined))
+    Ingredient(name, iType.getOrElse(dry), amount.getOrElse(-1), amount.isDefined)
   }
   
   def 材料名 = """[^：\n]+""".r ^^ { _.trim() }
@@ -42,9 +42,9 @@ class ChefParsers extends JavaTokenParsers {
   
   def オーブン温度 = "予めオーブンを".r ~> 整数 <~ "度に温めておいてください。" <~ 項目区切り
   
-  def 作り方(ingreds: List[(String, Ingredient)]) = {
+  def 作り方(ingreds: List[Ingredient]) = {
     val 材料名 = 
-      ("(?!)" :: ingreds.map(_._1).distinct.sortBy(-_.size).map(Pattern.quote)).mkString("|").r
+      ("(?!)" :: ingreds.map(_.name).distinct.sortBy(-_.size).map(Pattern.quote)).mkString("|").r
     
     "・作り方\n" ~> (手順(材料名) <~ """。\n?|\n|\z""".r).+ <~ 項目区切り ^^ { (ingreds, _) }
   }

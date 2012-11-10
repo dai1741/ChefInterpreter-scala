@@ -4,7 +4,8 @@ import scala.collection.mutable.{ ArrayBuffer, HashMap }
   
 object ChefProps {
   
-  case class Ingredient(var iType: IngredientType,
+  case class Ingredient(val name: String,
+                        var iType: IngredientType,
                         private var _data: Int = -1,
                         var isDefined: Boolean = false) {
     def data_=(n: Int) = {
