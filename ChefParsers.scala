@@ -10,6 +10,24 @@ class ChefParsers extends JavaTokenParsers {
   
   override val whiteSpace = """[ \t　]+""".r // do not ignore \n
   
+  def parseRecipe(recipe: String) = {
+    parseAll(レシピ, recipe) match {
+      case Success(ls @ (_::_), in) ⇒ {
+        val recipes = ls.map {
+          case title ~ Pair(ingreds, operations) ~ service ⇒ new PartialRecipe(
+            title, ingreds, operations ++ service
+          )
+        }
+        new Recipe(recipes.head, Map(recipes.map { (r) ⇒ (r.title -> r) }:_*))
+      }
+      case Success(Nil, in) ⇒ throw new IllegalRecipeException(
+        "Parse succeeded, but no recipe exists")
+      case NoSuccess(msg, in) ⇒ throw new IllegalRecipeException("Parse failed: " + msg)
+    }
+  }
+  
+  class IllegalRecipeException(msg: String) extends IllegalArgumentException(msg)
+  
   def レシピ =
     (レシピタイトル ~ (レシピコメント.? ~> 材料表 <~ 料理時間.? <~ オーブン温度.? >>
     作り方) ~ 配膳.? <~ 項目区切り).*
@@ -108,10 +126,10 @@ class VerboseChefParsers extends ChefParsers {
   override def 手順(材料名: Parser[String]) = log(super.手順(材料名))("手順")
 }
 
-object ChefParsers {
+object ChefParsers extends ChefParsers {
   def main(args: Array[String]) {
-    val me = if (args.last == "-v") new VerboseChefParsers else new ChefParsers
-    val res = me.parseAll(me.レシピ, io.Source.fromFile(args(0), "UTF-8").getLines mkString "\n")
+    val me = if (args.last == "-v") new VerboseChefParsers else this
+    val res = me.parseRecipe(io.Source.fromFile(args(0), "UTF-8").getLines mkString "\n")
     if (args.last == "-v") println(res)
   }
 }

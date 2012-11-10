@@ -1,8 +1,16 @@
 package jp.dai1741.parsing.chef
 
 import scala.collection.mutable.{ ArrayBuffer, HashMap }
+import jp.dai1741.parsing.chef.ChefOperations._
   
 object ChefProps {
+  
+  class PartialRecipe(val title: String,
+                      val ingreds: List[Ingredient],
+                      val operations: List[Operation])
+  
+  class Recipe(val mainRecipe: PartialRecipe,
+               val recipes: Map[String, PartialRecipe])
   
   case class Ingredient(val name: String,
                         var iType: IngredientType,
