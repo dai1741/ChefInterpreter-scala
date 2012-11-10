@@ -1,12 +1,11 @@
 package jp.dai1741.parsing.chef
 
 import scala.util.parsing.combinator._
-import scala.util.Random
-import scala.collection.mutable.{ ArrayBuffer, HashMap }
-import scala.collection.{ TraversableOnce }
-import java.util.regex.Pattern
 
-// TODO: Support auxiliary recipe and verb loops
+import java.util.regex.Pattern
+import jp.dai1741.parsing.chef.ChefOperations._
+import jp.dai1741.parsing.chef.ChefProps._
+
 class ChefParsers extends JavaTokenParsers {
   
   override val whiteSpace = """[ \t　]+""".r // do not ignore \n
@@ -101,161 +100,6 @@ class ChefParsers extends JavaTokenParsers {
   def 一段落 = """(?:[^\n]+\n?)+""".r
   def 項目区切り = """\n+|\z""".r
   def 整数 = decimalNumber ^^ { _.toInt }
-  
-  case class Ingredient(var iType: IngredientType,
-                        private var _data: Int = -1,
-                        var isDefined: Boolean = false) {
-    def data_=(n: Int) = {
-      _data = n
-      isDefined = true
-    }
-    def data = {
-      if (!isDefined) throw new IngredientNotInitializedException
-      _data
-    }
-    def liquefy { iType = liquid }
-    override def toString = iType.convertData(_data)
-  }
-  
-  class IngredientNotInitializedException extends IllegalStateException
-  
-  // Scala's enum is pretty cool, though not useful than java's one i think
-  case class IngredientType(convertData: (Int) ⇒ String)
-  val dry = IngredientType(_.toString)
-  val liquid = IngredientType(_.toChar.toString)
-  
-  class ChefStacks extends HashMap[Int, Stack[Ingredient]] {
-    override def apply(i: Int) = {
-      getOrElseUpdate(i, new Stack[Ingredient])
-    }
-    def showUntil(n: Int) {
-      for (i ← 0 until n) {
-        print(this(i).toSeq.reverse.map(_.toString) mkString "")
-      }
-      println() // should print line after each dish? or rather shouldn't print line at all?
-    }
-  }
-  
-  class Stack[A] extends ArrayBuffer[A] {
-    def push(elem: A) = this += elem
-    def pushAll(that: TraversableOnce[A]) = this ++= that
-    
-    def pop = {
-      val ret = last
-      trimEnd(1)
-      ret
-    }
-    def stir(num: Int) = insert(math.max(size - num - 1, 0), pop)
-  }
-  
-  
-  
-  trait Operation
-  // Strategy pattern should be better, but i prefer scalability derp derp
-  // class Operation(val process: () ⇒ Unit)
-  
-  case class FromFridge(ingredient: String) extends Operation
-  case class Put(ingredient: String, bowl: Int) extends Operation
-  case class Fold(ingredient: String, bowl: Int) extends Operation
-  case class Add(ingredient: String, bowl: Int) extends Operation
-  case class Remove(ingredient: String, bowl: Int) extends Operation
-  case class Combine(ingredient: String, bowl: Int) extends Operation
-  case class Divide(ingredient: String, bowl: Int) extends Operation
-  case class AddDries(bowl: Int) extends Operation
-  case class LiquefyIngredient(ingredient: String) extends Operation
-  case class LiquefyContents(bowl: Int) extends Operation
-  case class StirWhile(bowl: Int, minutes: Int) extends Operation
-  case class StirWith(ingredient: String, bowl: Int) extends Operation
-  case class Mix(bowl: Int) extends Operation
-  case class Clean(bowl: Int) extends Operation
-  case class Pour(bowl: Int, dish: Int) extends Operation
-  case class Verb(ingredient: Option[String], verb: String) extends Operation
-  case class VerbUntil(ingredient: Option[String], verbed: String) extends Operation
-  case class SetAside() extends Operation
-  case class ServeWith(recipe: String) extends Operation
-  case class Refrigerate(hours: Option[Int]) extends Operation
-  
-  case class Serve(num: Int) extends Operation
-  
-  class ChefInterpreter {
-    val bowls = new ChefStacks
-    val dishes = new ChefStacks
-    var ingredients = new HashMap[String, Ingredient]
-    
-    implicit def string2ingredient(s: String): Ingredient = ingredients(s)  // this is dangerous
-    
-    def process(expr: Operation) = expr match {
-      case FromFridge(ingred) ⇒ {
-        ingred.data = readInt // probably Scanner#nextInt is better
-      }
-      case Put(ingred, bowl) ⇒ {
-        bowls(bowl).push(ingred.copy())
-      }
-      case Fold(ingred, bowl) ⇒ {
-        val popped = bowls(bowl).pop
-        ingred.data = popped.data
-        ingred.iType = popped.iType // maight be unnecessary
-      }
-      case Add(ingred, bowl) ⇒ {
-        bowls(bowl).last.data += ingred.data
-      }
-      case Remove(ingred, bowl) ⇒ {
-        bowls(bowl).last.data -= ingred.data
-      }
-      case Combine(ingred, bowl) ⇒ {
-        bowls(bowl).last.data *= ingred.data
-      }
-      case Divide(ingred, bowl) ⇒ {
-        bowls(bowl).last.data /= ingred.data // should reverse divisor and dividend?
-      }
-      case AddDries(bowl) ⇒ {
-        // TODO: Retain ingredients ordering
-        ingredients.values.filter(_.iType == dry).foreach(bowls(bowl).push(_))
-      }
-      case LiquefyIngredient(ingred) ⇒ {
-        ingred.liquefy
-      }
-      case LiquefyContents(bowl) ⇒ {
-        bowls(bowl).foreach(_.liquefy)
-      }
-      case StirWhile(bowl, minutes) ⇒ {
-        bowls(bowl).stir(minutes)
-      }
-      case StirWith(ingred, bowl) ⇒ {
-        bowls(bowl).stir(ingred.data)
-      }
-      case Mix(bowl) ⇒ {
-        // whys there no in-place shuffle?
-        val shuffled = Random.shuffle(bowls(bowl).toSeq)
-        bowls(bowl).clear()
-        bowls(bowl).pushAll(shuffled)
-      }
-      case Clean(bowl) ⇒ {
-        bowls(bowl).clear()
-      }
-      case Pour(bowl, dish) ⇒ {
-        dishes(dish).pushAll(bowls(bowl))
-      }
-      case Verb(verb, ingred) ⇒ {
-      }
-      case VerbUntil(ingred, verbed) ⇒ {
-      }
-      case SetAside() ⇒ {
-      }
-      case ServeWith(recipe) ⇒ {
-      }
-      case Refrigerate(hours) ⇒ {
-        hours match {
-          case Some(n) ⇒ dishes.showUntil(n)
-          case _ ⇒
-        }
-        sys.exit(0) // TODO: auxiliary-recipe
-      }
-      case Serve(num) ⇒ {
-        dishes.showUntil(num)
-      }
-    }
-  }
   
 }
 
