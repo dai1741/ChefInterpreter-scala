@@ -37,9 +37,16 @@ object ChefProps {
   val dry = IngredientType(_.toString)
   val liquid = IngredientType(_.toChar.toString)
   
-  class ChefStacks extends HashMap[Int, ChefStack[Ingredient]] {
+  class ChefStacks extends HashMap[Int, ChefStack] {
+    def this(stacks: ChefStacks) {
+      this()
+      for ((i, stack) ← stacks) {
+        this += i → new ChefStack(stack)
+      }
+    }
+    
     override def apply(i: Int) = {
-      getOrElseUpdate(i, new ChefStack[Ingredient])
+      getOrElseUpdate(i, new ChefStack)
     }
     def showUntil(n: Int) {
       for (i ← 0 until n) {
@@ -49,9 +56,14 @@ object ChefProps {
     }
   }
   
-  class ChefStack[A] extends ArrayBuffer[A] {
-    def push(elem: A) = this += elem
-    def pushAll(that: TraversableOnce[A]) = this ++= that
+  class ChefStack extends ArrayBuffer[Ingredient] {
+    def this(stack: ChefStack) {
+      this
+      for (m ← stack) this += m.copy()
+    }
+    
+    def push(elem: Ingredient) = this += elem
+    def pushAll(that: TraversableOnce[Ingredient]) = this ++= that
     
     def pop = {
       val ret = last

@@ -30,25 +30,27 @@ trait RecipeLoopCounter {
   }
 }
 
-// TODO: Implement, Support auxiliary recipe and verb loops
-class ChefInterpreter {
-  val bowls = new ChefStacks
-  val dishes = new ChefStacks
-  var ingredients = new HashMap[String, Ingredient]
+class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
+                  val recipes: Map[String, PartialRecipe with RecipeLoopCounter],
+                  val bowls: ChefStacks = new ChefStacks,
+                  val dishes: ChefStacks = new ChefStacks) {
+  
+  type LoopableRecipe = PartialRecipe with RecipeLoopCounter
+
+  val ingredients = new HashMap[String, Ingredient]
+  var curLine = 0
+  var terminating = false
+  val numOperations = curRecipe.operations.size
   
   implicit def string2ingredient(s: String): Ingredient = ingredients(s)  // this is dangerous
   
-  def exec(recipe: Recipe): Unit = {
-    val callableRecipes = recipe.recipes.mapValues { (r) ⇒
-      new PartialRecipe(r.title, r.ingreds, r.operations) with RecipeLoopCounter
+  def exec(): Unit = {
+    ingredients ++= curRecipe.ingreds.map { (i) ⇒ (i.name, i.copy()) }
+    while (curLine < numOperations && !terminating) {
+      // println("cur bowl: " + bowls(0) + ", executing: " + curRecipe.operations(curLine))
+      process(curRecipe.operations(curLine))
+      curLine += 1
     }
-    exec(callableRecipes(recipe.mainRecipe.title), callableRecipes)
-  }
-  
-  def exec(curRecipe: PartialRecipe with RecipeLoopCounter,
-           recipes: Map[String, PartialRecipe with RecipeLoopCounter]): Unit = {
-    ingredients ++= curRecipe.ingreds.map { (i) ⇒ (i.name, i) }
-    for (expr <- curRecipe.operations) process(expr)
   }
   
   def process(expr: Operation) = expr match {
@@ -103,24 +105,44 @@ class ChefInterpreter {
     case Pour(bowl, dish) ⇒ {
       dishes(dish).pushAll(bowls(bowl))
     }
-    case Verb(verb, ingred) ⇒ {
+    case Verb(ingred, verb) ⇒ {
+      if (ingred.data == 0) {
+        curLine = curRecipe.loopEnds(curLine).get  // assuming no exception thrown
+      }
     }
     case VerbUntil(ingred, verbed) ⇒ {
+      ingred.map(_.data -= 1)
+      curLine = curRecipe.loopStarts(curLine).get - 1  // it will be incremented
     }
     case SetAside() ⇒ {
+      curLine = curRecipe.loopEnds(curLine).getOrElse(numOperations)
     }
     case ServeWith(recipe) ⇒ {
+      val newBowls = new ChefStacks(bowls)
+      val newDishes = new ChefStacks(dishes)
+      new ChefContext(recipes(recipe), recipes, newBowls, newDishes).exec()
+      // bowls(0).clear() // might be necessary
+      bowls(0).pushAll(newBowls(0))
     }
     case Refrigerate(hours) ⇒ {
       hours match {
         case Some(n) ⇒ dishes.showUntil(n)
         case _ ⇒
       }
-      sys.exit(0) // TODO: auxiliary-recipe
+      terminating = true
     }
     case Serve(num) ⇒ {
       dishes.showUntil(num)
     }
+  }
+}
+
+class ChefInterpreter {
+  def exec(recipe: Recipe): Unit = {
+    val callableRecipes = recipe.recipes.mapValues { (r) ⇒
+      new PartialRecipe(r.title, r.ingreds, r.operations) with RecipeLoopCounter
+    }
+    new ChefContext(callableRecipes(recipe.mainRecipe.title), callableRecipes).exec()
   }
 }
 
