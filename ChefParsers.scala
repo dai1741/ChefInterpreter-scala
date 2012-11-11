@@ -101,7 +101,8 @@ class ChefParsers extends JavaTokenParsers {
   
   // verb loop correspondence will be unchecked, so grammer validation is extremely lazy.
   def どうする = """\S+[うくぐすずつづぬふぶぷむゆる]""".r
-  def 何かし終わるまで = """\S+[いきぎしじちぢにひびぴみゐり]終(?:わ|え)るまで""".r
+  def 何かし終わるまで =
+    """\S+[いきぎしじちぢにひびぴみゐり|えけげせぜてでねへべぺめゑれ]終(?:わ|え)るまで""".r
   
   def 配膳 = ((整数 <~ "人分|人前".r <~ 一行の文章.?) | ("さあ召し上がれ！" ^^^ 1)) ^^ Serve
     
