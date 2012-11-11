@@ -88,13 +88,13 @@ class ChefParsers extends JavaTokenParsers {
     ボウル("の中身をよく混ぜる")                               ^^ Mix |
     ボウル("をきれいにする")                                   ^^ Clean |
     ボウル("の中身を") ~ n番目の <~ "オーブン皿へ移す"         ^^ composite(Pour) |
+    材料("を") ~ どうする                                      ^^ composite(Verb) |
     何かし終わるまで ~> 材料("を").? ~ どうする                ^^ composite(VerbUntil) |
     """[^\n。]+を添える(?=[\n。])""".r                         ^^ { (s) ⇒ 
       ServeWith(s.replaceFirst("を添える$", ""))
     } |
     "しばらく置いておく"                                       ^^^ SetAside() |
-    (整数 <~ "時間").? <~ "冷蔵庫に入れておく"                 ^^ Refrigerate |
-    材料("を").? ~ どうする                                    ^^ composite(Verb)
+    (整数 <~ "時間").? <~ "冷蔵庫に入れておく"                 ^^ Refrigerate
   }
   
   // verb loop correspondence will be unchecked, so grammer validation is extremely lazy.

@@ -19,7 +19,7 @@ object ChefOperations {
   case class Mix(bowl: Int) extends Operation
   case class Clean(bowl: Int) extends Operation
   case class Pour(bowl: Int, dish: Int) extends Operation
-  case class Verb(ingredient: Option[String], verb: String) extends Operation
+  case class Verb(ingredient: String, verb: String) extends Operation
   case class VerbUntil(ingredient: Option[String], verbed: String) extends Operation
   case class SetAside() extends Operation
   case class ServeWith(recipe: String) extends Operation
