@@ -26,8 +26,6 @@ class ChefParsers extends JavaTokenParsers {
     }
   }
   
-  class IllegalRecipeException(msg: String) extends IllegalArgumentException(msg)
-  
   def レシピ =
     (レシピタイトル ~ (レシピコメント.? ~> 材料表 <~ 料理時間.? <~ オーブン温度.? >>
     作り方) ~ 配膳.? <~ 項目区切り).*

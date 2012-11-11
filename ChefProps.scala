@@ -30,6 +30,8 @@ object ChefProps {
   
   class IngredientNotInitializedException extends IllegalStateException
   
+  class IllegalRecipeException(msg: String) extends IllegalArgumentException(msg)
+  
   // Scala's enum is pretty cool, though not useful than java's one i think
   case class IngredientType(convertData: (Int) ⇒ String)
   val dry = IngredientType(_.toString)
