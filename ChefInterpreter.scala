@@ -1,9 +1,8 @@
 package jp.dai1741.parsing.chef
-import scala.util.Random
-import scala.collection.mutable.{ HashMap }
 
 import jp.dai1741.parsing.chef.ChefOperations._
 import jp.dai1741.parsing.chef.ChefProps._
+import jp.dai1741.parsing.chef.ChefStacks
 import jp.dai1741.parsing.chef.ChefParsers
 
 trait RecipeLoopCounter {
@@ -30,26 +29,32 @@ trait RecipeLoopCounter {
   }
 }
 
+class ChefRuntimeException(msg: String, cause: Throwable) extends RuntimeException(msg, cause)
+
 class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
                   val recipes: Map[String, PartialRecipe with RecipeLoopCounter],
                   val bowls: ChefStacks = new ChefStacks,
                   val dishes: ChefStacks = new ChefStacks) {
-  
-  type LoopableRecipe = PartialRecipe with RecipeLoopCounter
 
-  val ingredients = new HashMap[String, Ingredient]
+  val ingredients = Map(curRecipe.ingreds.map { (i) ⇒ (i.name, i.copy()) }: _*)
+  // hmm i cant understand why the below code wont work
+  // val ingredients = curRecipe.ingreds.groupBy(_.name).mapValues(_.last.copy())
+  
   var curLine = 0
-  var terminating = false
   val numOperations = curRecipe.operations.size
   
   implicit def string2ingredient(s: String): Ingredient = ingredients(s)  // this is dangerous
   
   def exec(): Unit = {
-    ingredients ++= curRecipe.ingreds.map { (i) ⇒ (i.name, i.copy()) }
-    while (curLine < numOperations && !terminating) {
-      // println("cur bowl: " + bowls(0) + ", executing: " + curRecipe.operations(curLine))
-      process(curRecipe.operations(curLine))
-      curLine += 1
+    try {
+      while (curLine < numOperations) {
+        process(curRecipe.operations(curLine))
+        curLine += 1
+      }
+    } catch {
+      case e: Exception => throw new ChefRuntimeException(
+          "Exception caused when executing %s (operation #%d)".format(
+            curRecipe.operations(curLine), curLine), e)
     }
   }
   
@@ -61,9 +66,7 @@ class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
       bowls(bowl).push(ingred.copy())
     }
     case Fold(ingred, bowl) ⇒ {
-      val popped = bowls(bowl).pop
-      ingred.data = popped.data
-      // ingred.iType = popped.iType // might be unnecessary
+      ingred.data = bowls(bowl).pop.data
     }
     case Add(ingred, bowl) ⇒ {
       bowls(bowl).last.data += ingred.data
@@ -75,7 +78,7 @@ class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
       bowls(bowl).last.data *= ingred.data
     }
     case Divide(ingred, bowl) ⇒ {
-      bowls(bowl).last.data /= ingred.data // should reverse divisor and dividend?
+      bowls(bowl).last.data /= ingred.data
     }
     case AddDries(bowl) ⇒ {
       bowls(bowl).push(
@@ -94,10 +97,7 @@ class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
       bowls(bowl).stir(ingred.data)
     }
     case Mix(bowl) ⇒ {
-      // whys there no in-place shuffle?
-      val shuffled = Random.shuffle(bowls(bowl).toSeq)
-      bowls(bowl).clear()
-      bowls(bowl).pushAll(shuffled)
+      bowls(bowl).shuffle
     }
     case Clean(bowl) ⇒ {
       bowls(bowl).clear()
@@ -107,12 +107,12 @@ class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
     }
     case Verb(ingred, verb) ⇒ {
       if (ingred.data == 0) {
-        curLine = curRecipe.loopEnds(curLine).get  // assuming no exception thrown
+        curLine = curRecipe.loopEnds(curLine).getOrElse(curLine)
       }
     }
     case VerbUntil(ingred, verbed) ⇒ {
-      ingred.map(_.data -= 1)
-      curLine = curRecipe.loopStarts(curLine).get - 1  // it will be incremented
+      ingred.foreach(_.data -= 1)
+      curLine = curRecipe.loopStarts(curLine).map(_ - 1).getOrElse(curLine)
     }
     case SetAside() ⇒ {
       curLine = curRecipe.loopEnds(curLine).getOrElse(numOperations)
@@ -121,34 +121,28 @@ class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
       val newBowls = new ChefStacks(bowls)
       val newDishes = new ChefStacks(dishes)
       new ChefContext(recipes(recipe), recipes, newBowls, newDishes).exec()
-      // bowls(0).clear() // might be necessary
       bowls(0).pushAll(newBowls(0))
     }
     case Refrigerate(hours) ⇒ {
-      hours match {
-        case Some(n) ⇒ dishes.showUntil(n)
-        case _ ⇒
-      }
-      terminating = true
+      hours.foreach(dishes.show(_))
+      curLine = numOperations // ends current procedure
     }
     case Serve(num) ⇒ {
-      dishes.showUntil(num)
+      dishes.show(num)
     }
-  }
-}
-
-class ChefInterpreter {
-  def exec(recipe: Recipe): Unit = {
-    val callableRecipes = recipe.recipes.mapValues { (r) ⇒
-      new PartialRecipe(r.title, r.ingreds, r.operations) with RecipeLoopCounter
-    }
-    new ChefContext(callableRecipes(recipe.mainRecipe.title), callableRecipes).exec()
   }
 }
 
 object ChefInterpreter {
+  def exec(recipe: Recipe): Unit = {
+    val loopableRecipes = recipe.recipes.mapValues { (r) ⇒
+      new PartialRecipe(r) with RecipeLoopCounter
+    }
+    new ChefContext(loopableRecipes(recipe.mainRecipe.title), loopableRecipes).exec()
+  }
+  
   def main(args: Array[String]) {
-    new ChefInterpreter().exec(
+    exec(
       ChefParsers.parseRecipe(io.Source.fromFile(args(0), "UTF-8").getLines mkString "\n")
     )
   }
