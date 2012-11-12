@@ -2,8 +2,6 @@ package jp.dai1741.parsing.chef
 
 import jp.dai1741.parsing.chef.ChefOperations._
 import jp.dai1741.parsing.chef.ChefProps._
-import jp.dai1741.parsing.chef.ChefStacks
-import jp.dai1741.parsing.chef.ChefParsers
 
 trait RecipeLoopCounter {
   self: PartialRecipe ⇒
