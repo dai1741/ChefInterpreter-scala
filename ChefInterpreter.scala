@@ -63,7 +63,7 @@ class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
     case Fold(ingred, bowl) ⇒ {
       val popped = bowls(bowl).pop
       ingred.data = popped.data
-      ingred.iType = popped.iType // maight be unnecessary
+      // ingred.iType = popped.iType // might be unnecessary
     }
     case Add(ingred, bowl) ⇒ {
       bowls(bowl).last.data += ingred.data
@@ -78,8 +78,8 @@ class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
       bowls(bowl).last.data /= ingred.data // should reverse divisor and dividend?
     }
     case AddDries(bowl) ⇒ {
-      // TODO: Retain ingredients ordering
-      ingredients.values.filter(_.iType == dry).foreach(bowls(bowl).push(_))
+      bowls(bowl).push(
+        Ingredient("dummy", dry, ingredients.values.filter(_.iType == dry).map(_.data).sum, true))
     }
     case LiquefyIngredient(ingred) ⇒ {
       ingred.liquefy
