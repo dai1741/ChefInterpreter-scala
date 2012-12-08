@@ -6,7 +6,11 @@ import java.util.regex.Pattern
 import jp.dai1741.parsing.chef.ChefOperations._
 import jp.dai1741.parsing.chef.ChefProps._
 
-class ChefParsers extends JavaTokenParsers {
+trait ChefParsers {
+  def parseRecipe(recipe: String): Recipe
+}
+
+class JapaneseChefParsers extends ChefParsers with JavaTokenParsers {
   
   override val whiteSpace = """[ \t　]+""".r // do not ignore \n
   
@@ -119,15 +123,15 @@ class ChefParsers extends JavaTokenParsers {
   
 }
 
-class VerboseChefParsers extends ChefParsers {
+class VerboseJapaneseChefParsers extends JapaneseChefParsers {
   override def 材料定義 = log(super.材料定義)("材料定義")
   override def 材料名 = log(super.材料名)("材料名")
   override def 手順(材料名: Parser[String]) = log(super.手順(材料名))("手順")
 }
 
-object ChefParsers extends ChefParsers {
+object ChefParsers {
   def main(args: Array[String]) {
-    val me = if (args.last == "-v") new VerboseChefParsers else this
+    val me = if (args.last == "-v") new VerboseJapaneseChefParsers else new JapaneseChefParsers()
     val res = me.parseRecipe(io.Source.fromFile(args(0), "UTF-8").getLines mkString "\n")
     if (args.last == "-v") println(res)
   }
