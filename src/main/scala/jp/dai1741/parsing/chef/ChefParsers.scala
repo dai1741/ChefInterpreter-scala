@@ -4,7 +4,6 @@ import scala.util.parsing.combinator._
 
 import java.util.regex.Pattern
 import jp.dai1741.parsing.chef.ChefOperations._
-import jp.dai1741.parsing.chef.ChefProps._
 
 trait ChefParsers {
   def parseRecipe(recipe: String): Recipe
@@ -42,7 +41,7 @@ class JapaneseChefParsers extends ChefParsers with JavaTokenParsers {
   def 材料定義 = 材料名 ~ (("：" ~> 分量).? ^^ {
     _.getOrElse(new ~(None, None))
   }) <~ "\n" ^^ { case (name ~ (amount ~ iType)) ⇒
-    Ingredient(name, iType.getOrElse(dry), amount.getOrElse(-1), amount.isDefined)
+    Ingredient(name, iType.getOrElse(IngredientType.dry), amount.getOrElse(-1), amount.isDefined)
   }
   
   def 材料名 = """[^：\n]+""".r ^^ { _.trim() }
@@ -53,9 +52,10 @@ class JapaneseChefParsers extends ChefParsers with JavaTokenParsers {
   
   def 前単位 = "約?(大さじ|小さじ)?".r
   def 後単位 = (液状後単位 | 固形後単位 | 不明後単位) <~ "弱|強|(?:程度?)?".r
-  def 液状後単位 = "(?:滴|(ミリ)?リットル|杯|cc|ml|L)".r ^^^ Some(liquid)
+  def 液状後単位 = "(?:滴|(ミリ)?リットル|杯|cc|ml|L)".r ^^^ Some(IngredientType.liquid)
   def 固形後単位 =
-    "(?:個|枚|(キロ)?グラム|切れ|かけ|片|玉|本|匹|束|袋|株|丁|cm|g|kg)".r ^^^ Some(dry)
+    "(?:個|枚|(キロ)?グラム|切れ|かけ|片|玉|本|匹|束|袋|株|丁|cm|g|kg)".r ^^^
+      Some(IngredientType.dry)
   def 不明後単位 = "(?:カップ|升|合|缶)".r ^^^ None
   
   def 料理時間 = "料理時間(の目安)?：".r ~> 整数 <~ 一行の文章 <~ 項目区切り

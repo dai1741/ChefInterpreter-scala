@@ -1,7 +1,6 @@
 package jp.dai1741.parsing.chef
 
 import jp.dai1741.parsing.chef.ChefOperations._
-import jp.dai1741.parsing.chef.ChefProps._
 
 trait ChefInterpreter {
   def execute(recipe: Recipe)
@@ -67,7 +66,8 @@ class ChefContext(val curRecipe: LoopablePartialRecipe,
     }
     case AddDries(bowl) ⇒ {
       bowls(bowl).push(
-        Ingredient("dummy", dry, ingredients.values.filter(_.iType == dry).map(_.data).sum, true))
+        Ingredient("dummy", IngredientType.dry, ingredients.values.filter(
+          _.iType == IngredientType.dry).map(_.data).sum, true))
     }
     case LiquefyIngredient(ingred) ⇒ {
       ingred.liquefy
