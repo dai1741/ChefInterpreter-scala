@@ -1,7 +1,5 @@
 package jp.dai1741.parsing.chef
 
-import jp.dai1741.parsing.chef.ChefOperations._
-
 trait ChefInterpreter {
   def execute(recipe: Recipe)
 }

@@ -1,7 +1,5 @@
 package jp.dai1741.parsing.chef
 
-import jp.dai1741.parsing.chef.ChefOperations._
-
 class PartialRecipe(val title: String,
                     val ingreds: List[Ingredient],
                     val operations: List[Operation]) {

@@ -1,9 +1,7 @@
 package jp.dai1741.parsing.chef
 
 import scala.util.parsing.combinator._
-
 import java.util.regex.Pattern
-import jp.dai1741.parsing.chef.ChefOperations._
 
 trait ChefParsers {
   def parseRecipe(recipe: String): Recipe
