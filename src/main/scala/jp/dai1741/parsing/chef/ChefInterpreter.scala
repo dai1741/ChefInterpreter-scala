@@ -152,12 +152,3 @@ class BlockedLoopChefInterpreter extends ChefInterpreter {
     new ChefContext(loopableRecipes(recipe.mainRecipe.title), loopableRecipes).execute()
   }
 }
-
-object ChefInterpreterMain {
-  
-  def main(args: Array[String]) {
-    new BlockedLoopChefInterpreter().execute(
-      new JapaneseChefParsers().parseRecipe(io.Source.fromFile(args(0), "UTF-8").getLines mkString "\n")
-    )
-  }
-}
