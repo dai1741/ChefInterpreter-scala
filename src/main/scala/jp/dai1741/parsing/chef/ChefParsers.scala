@@ -7,9 +7,129 @@ trait ChefParsers {
   def parseRecipe(recipe: String): Recipe
 }
 
+// TODO: rename parsers
+class OriginalChefParsers extends ChefParsers with JavaTokenParsers {
+  
+  override val whiteSpace = """[ \t　]+""".r  // do not ignore \n
+  
+  def parseRecipe(recipeStr: String) = {
+    parseAll(レシピ, recipeStr) match {
+      case Success(ls @ (_::_), in) ⇒ {
+        val recipes = ls.map {
+          case title ~ Pair(ingreds, operations) ~ service ⇒ new PartialRecipe(
+            title, ingreds, operations ++ service
+          )
+        }
+        new Recipe(recipes.head, Map(recipes.map { (r) ⇒ (r.title -> r) }:_*))
+      }
+      case Success(Nil, in) ⇒ throw new IllegalRecipeException(
+        "Parse succeeded, but no recipe exists")
+      case NoSuccess(msg, in) ⇒ throw new IllegalRecipeException("Parse failed: " + msg)
+    }
+  }
+
+  // def recipe = 
+  //   (recipeTitle ~ (comments.? ~> ingredientList <~ cookingTime.? <~ ovenTemperature.? >>
+  //   method) ~ serves.? <~ separators).*
+
+
+  
+  def レシピ =
+    (レシピタイトル ~ (レシピコメント.? ~> 材料表 <~ 料理時間.? <~ オーブン温度.? >>
+    作り方) ~ 配膳.? <~ 項目区切り).*
+  
+  def レシピタイトル = """(?:\.?[^\n.]+)+""".r <~ "." <~ 項目区切り ^^ { _.toLowerCase }
+  def レシピコメント = """^(?!Ingredients\.)""".r ~> 一段落 <~ 項目区切り
+  
+  def 材料表 = "Ingredients.\n" ~> 材料定義.+ <~ 項目区切り
+  
+  def 材料定義 = (分量.? ^^ {
+    _.getOrElse(new ~(None, None))
+  }) ~ 材料名 <~ "\n" ^^ { case ((amount ~ iType) ~ name) ⇒
+    Ingredient(name, iType.getOrElse(IngredientType.dry), amount.getOrElse(-1), amount.isDefined)
+  }
+  
+  def 材料名 = 一行の文章 ^^ { _.trim() }
+  
+  def 分量 = (整数.? ~ (後単位.? ^^ {
+    _.flatMap(identity)
+  }))
+  
+  def 後単位 = "heaped|(level)?".r ~> (液状後単位 | 固形後単位 | 不明後単位)
+  def 液状後単位 = "(?:ml|l|dash(es)?)".r ^^^ Some(IngredientType.liquid)
+  def 固形後単位 = "(?:g|kg|pinch(es)?)".r ^^^ Some(IngredientType.dry)
+  def 不明後単位 = "(?:cups?|teaspoons?|tablespoons?)".r ^^^ None
+  
+  def 料理時間 = "Cooking time:".r ~> 整数 <~ """(hours?|minutes?)\.""".r <~ 項目区切り
+  
+  def オーブン温度 = "Pre-heat oven to temperature ".r ~> 整数 <~ " degrees Celsius" <~ (" (gas mark " <~ 整数 <~ ")").? <~ "." <~ 項目区切り
+  
+  def 作り方(ingreds: List[Ingredient]) = {
+    val 材料名 = 
+      ("(?!)" :: ingreds.map(_.name).distinct.sortBy(-_.size).map(Pattern.quote)).mkString("|").r
+    
+    "Method.\n" ~> (手順(材料名) <~ """\.\n?|\n|\z""".r).+ <~ 項目区切り ^^ { (ingreds, _) }
+  }
+  
+  def 手順(ingreds: Parser[String]) = {
+  
+    def composite[A, B](func: (A, B) ⇒ Operation): ((~[A, B]) ⇒ Operation) = _ match {
+      case (a ~ b) ⇒ func(a, b)
+    }
+    def ingred(suf: String = "") = ("the".? ~> ingreds) <~ suf
+    
+    "Take" ~> ingred("from refrigerator")               ^^ FromFridge |
+    "Put" ~> (ingred() ~ intoNthBowl)                   ^^ composite(Put) |
+    "Fold" ~> ingred() ~ intoNthBowl                    ^^ composite(Fold) |
+    "Add" ~> ingred() ~ implicitNthBowl("to")           ^^ composite(Add) |
+    "Remove" ~> ingred() ~ implicitNthBowl("from")      ^^ composite(Remove) |
+    "Combine" ~> ingred() ~ implicitNthBowl("into")     ^^ composite(Combine) |
+    "Divide" ~> ingred() ~ implicitNthBowl("into")      ^^ composite(Divide) |
+    "Add dry ingredients" ~> implicitNthBowl("to")      ^^ AddDries |
+    liquefy ~> ingred()                                 ^^ LiquefyIngredient |
+    liquefy ~> "contents of the" ~> nthBowl             ^^ LiquefyContents |
+    "Stir" ~> implicitNthBowl() ~ ("for" ~> 整数 <~ "minutes") ^^ composite(StirWhile) |
+    "Stir" ~> ingred() ~ ("into" ~> nthBowl)            ^^ composite(StirWith) |
+    "Stir" ~> implicitNthBowl() <~ "well"               ^^ Mix |
+    "Clean" ~> nthBowl                                  ^^ Clean |
+    "Pour contents of" ~> nthBowl ~ ("into" ~> "the".? ~> nth <~ "baking dish") ^^ composite(Pour) |
+    verb ~ ingred()                                     ^^ { case (v ~ i) ⇒
+      Verb(i, v)
+    } |||
+    verb ~> ingred().? ~ ("until" ~> verbed)            ^^ composite(VerbUntil) |||
+    "Serve with " ~> """[^.]+""".r                      ^^ { (s) ⇒
+      ServeWith(s.toLowerCase)  // watch out, these are case-insensitive
+    } |
+    "Set aside"                                         ^^^ SetAside() |
+    "Refrigerate" ~> ("for " ~> 整数 <~ "hours").?      ^^ Refrigerate
+  }
+
+  def nth = (整数 <~ "st|nd|th".r).? ^^ {
+    _.getOrElse(1) - 1
+  }
+  def nthBowl = "the".? ~> nth <~ "mixing bowl"
+  def implicitNthBowl(pre: String = "") = (pre ~> nthBowl).? ^^ {
+    _.getOrElse(0)
+  }
+  def intoNthBowl = "into" ~> nthBowl
+  def liquefy = """Liqu[ei]fy""".r
+  
+  // verb loop correspondence will be unchecked, so grammer validation is extremely lazy.
+  def verb = """\w+""".r
+  def verbed = """\w+""".r
+  
+  def 配膳 = ("Serves" ~> 整数 <~ ".") ^^ Serve
+  
+  def 一行の文章 = """[^\n]+""".r
+  def 一段落 = """(?:[^\n]+\n?)+""".r
+  def 項目区切り = """\n+|\z""".r
+  def 整数 = """\d+""".r ^^ { _.toInt }  // number???
+}
+
+
 class JapaneseChefParsers extends ChefParsers with JavaTokenParsers {
   
-  override val whiteSpace = """[ \t　]+""".r // do not ignore \n
+  override val whiteSpace = """[ \t　]+""".r  // do not ignore \n
   
   def parseRecipe(recipe: String) = {
     parseAll(レシピ, recipe) match {
@@ -32,7 +152,7 @@ class JapaneseChefParsers extends ChefParsers with JavaTokenParsers {
     作り方) ~ 配膳.? <~ 項目区切り).*
   
   def レシピタイトル = 一行の文章 <~ 項目区切り
-  def レシピコメント = "^(?!・材料)".r ~>一段落 <~ 項目区切り
+  def レシピコメント = "^(?!・材料)".r ~> 一段落 <~ 項目区切り
   
   def 材料表 = "・材料\n" ~> 材料定義.+ <~ 項目区切り
   

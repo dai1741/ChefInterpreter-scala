@@ -3,14 +3,18 @@ import jp.dai1741.parsing.chef._
 
 object Chef {
 
-  def evalJapanese(script: String) {
+  def eval(script: String, parsers: ChefParsers) {
     new BlockedLoopChefInterpreter().execute(
-      new JapaneseChefParsers().parseRecipe(script)
+      parsers.parseRecipe(script)
     )
   }
+
+  def evalJapanese(script: String) = eval(script, new JapaneseChefParsers())
+
+  def evalOriginal(script: String) = eval(script, new OriginalChefParsers())
   
   def main(args: Array[String]) {
-    evalJapanese(io.Source.fromFile(args(0), "UTF-8").getLines mkString "\n")
+    evalOriginal(io.Source.fromFile(args(0), "UTF-8").getLines mkString "\n")
   }
 
 }
