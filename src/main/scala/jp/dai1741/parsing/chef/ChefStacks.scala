@@ -2,7 +2,6 @@ package jp.dai1741.parsing.chef
 
 import scala.util.Random
 import scala.collection.mutable.{ ArrayBuffer, HashMap }
-import jp.dai1741.parsing.chef.ChefProps._
   
 class ChefStacks extends HashMap[Int, ChefStack] {
   def this(stacks: ChefStacks) {

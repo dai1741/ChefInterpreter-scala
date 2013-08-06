@@ -1,0 +1,26 @@
+Auxiliary-recipe sample.
+
+Invokes auxiliary-recipe 3 times.
+
+Ingredients.
+3 eggs
+
+Method.
+Melt the eggs.
+Serve with auxiliary recipe.
+Throw the eggs until melted.
+Pour contents of the mixing bowl into the baking dish.
+
+Serves 1.
+
+
+Auxiliary recipe.
+
+Ingredients.
+10 rib-eye steaks
+
+Method.
+Put rib-eye steaks into mixing bowl.
+Pour contents of the mixing bowl into the baking dish.
+Clean mixing bowl.
+Refrigerate for 1 hours.

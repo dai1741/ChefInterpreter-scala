@@ -1,0 +1,17 @@
+Looping sample.
+
+Show numbers from 1 to 10
+
+Ingredients.
+10 eggs
+10 g butter
+
+Method.
+Liquefy butter.
+Melt the eggs.
+Put butter into the mixing bowl.
+Put eggs into the mixing bowl.
+Melt the eggs until melted.
+Pour contents of the mixing bowl into the baking dish.
+
+Serves 1.

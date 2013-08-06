@@ -1,38 +1,20 @@
 package jp.dai1741.parsing.chef
 
-import jp.dai1741.parsing.chef.ChefOperations._
-import jp.dai1741.parsing.chef.ChefProps._
-import jp.dai1741.parsing.chef.ChefStacks
-import jp.dai1741.parsing.chef.ChefParsers
+trait ChefInterpreter {
+  def execute(recipe: Recipe)
+}
 
-trait RecipeLoopCounter {
-  self: PartialRecipe ⇒
-  
-  private def foldLoop[Pusher: ClassManifest, Popper: ClassManifest]:
-      ((List[Int], (Operation, Int)) ⇒ List[Int]) = {
-    case (prev, (cur, index)) ⇒ { cur match {
-      case o if implicitly[ClassManifest[Pusher]].erasure.isInstance(cur) ⇒ index :: prev
-      case o if implicitly[ClassManifest[Popper]].erasure.isInstance(cur) ⇒ prev.tail
-      case _ ⇒ prev
-    }}
-  }
-  val (loopStarts, loopEnds) = try {
-    (
-      operations.zipWithIndex.scanLeft(List.empty[Int]) {
-        foldLoop[Verb, VerbUntil] }.init.map(_.headOption),
-      operations.zipWithIndex.scanRight(List.empty[Int]) {
-        (n,z) ⇒ identity(foldLoop[VerbUntil, Verb])(z,n) }.tail.map(_.headOption)
-    )
-  } catch {
-    case _: UnsupportedOperationException ⇒
-      throw new IllegalRecipeException("Imbalanced verb loops")
-  }
+trait LoopablePartialRecipe {
+  val ingreds: List[Ingredient]
+  val operations: List[Operation]
+  val loopStarts: List[Option[Int]]
+  val loopEnds: List[Option[Int]]
 }
 
 class ChefRuntimeException(msg: String, cause: Throwable) extends RuntimeException(msg, cause)
 
-class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
-                  val recipes: Map[String, PartialRecipe with RecipeLoopCounter],
+class ChefContext(val curRecipe: LoopablePartialRecipe,
+                  val recipes: Map[String, LoopablePartialRecipe],
                   val bowls: ChefStacks = new ChefStacks,
                   val dishes: ChefStacks = new ChefStacks) {
 
@@ -45,7 +27,7 @@ class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
   
   implicit def string2ingredient(s: String): Ingredient = ingredients(s)  // this is dangerous
   
-  def exec(): Unit = {
+  def execute(): Unit = {
     try {
       while (curLine < numOperations) {
         process(curRecipe.operations(curLine))
@@ -82,7 +64,8 @@ class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
     }
     case AddDries(bowl) ⇒ {
       bowls(bowl).push(
-        Ingredient("dummy", dry, ingredients.values.filter(_.iType == dry).map(_.data).sum, true))
+        Ingredient("dummy", IngredientType.dry, ingredients.values.filter(
+          _.iType == IngredientType.dry).map(_.data).sum, true))
     }
     case LiquefyIngredient(ingred) ⇒ {
       ingred.liquefy
@@ -120,7 +103,7 @@ class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
     case ServeWith(recipe) ⇒ {
       val newBowls = new ChefStacks(bowls)
       val newDishes = new ChefStacks(dishes)
-      new ChefContext(recipes(recipe), recipes, newBowls, newDishes).exec()
+      new ChefContext(recipes(recipe), recipes, newBowls, newDishes).execute()
       bowls(0).pushAll(newBowls(0))
     }
     case Refrigerate(hours) ⇒ {
@@ -133,17 +116,37 @@ class ChefContext(val curRecipe: PartialRecipe with RecipeLoopCounter,
   }
 }
 
-object ChefInterpreter {
-  def exec(recipe: Recipe): Unit = {
-    val loopableRecipes = recipe.recipes.mapValues { (r) ⇒
-      new PartialRecipe(r) with RecipeLoopCounter
-    }
-    new ChefContext(loopableRecipes(recipe.mainRecipe.title), loopableRecipes).exec()
-  }
+private trait RecipeLoopCounter {
+  self: PartialRecipe ⇒
   
-  def main(args: Array[String]) {
-    exec(
-      ChefParsers.parseRecipe(io.Source.fromFile(args(0), "UTF-8").getLines mkString "\n")
+  private def foldLoop[Pusher: ClassManifest, Popper: ClassManifest]:
+      ((List[Int], (Operation, Int)) ⇒ List[Int]) = {
+    case (prev, (cur, index)) ⇒ { cur match {
+      case o if implicitly[ClassManifest[Pusher]].erasure.isInstance(cur) ⇒ index :: prev
+      case o if implicitly[ClassManifest[Popper]].erasure.isInstance(cur) ⇒ prev.tail
+      case _ ⇒ prev
+    }}
+  }
+  val (loopStarts, loopEnds) = try {
+    (
+      operations.zipWithIndex.scanLeft(List.empty[Int]) {
+        foldLoop[Verb, VerbUntil] }.init.map(_.headOption),
+      operations.zipWithIndex.scanRight(List.empty[Int]) {
+        (n,z) ⇒ identity(foldLoop[VerbUntil, Verb])(z,n) }.tail.map(_.headOption)
     )
+  } catch {
+    case _: UnsupportedOperationException ⇒
+      throw new IllegalRecipeException("Imbalanced verb loops")
+  }
+  // This implementation is somewhat crazy, it should be refactored
+}
+
+class BlockedLoopChefInterpreter extends ChefInterpreter {
+
+  def execute(recipe: Recipe): Unit = {
+    val loopableRecipes = recipe.recipes.mapValues { (r) ⇒
+      new PartialRecipe(r) with RecipeLoopCounter with LoopablePartialRecipe
+    }
+    new ChefContext(loopableRecipes(recipe.mainRecipe.title), loopableRecipes).execute()
   }
 }

@@ -1,4 +1,4 @@
-挨拶のスフレ
+ハロー・ワールド・スフレ
 
 このレシピは不朽の名句「Hello world!」をしらみつぶしに出力する。同時に、1人前としては量の多い料理も作る。
 オリジナルのソースコードはこちら：http://www.dangermouse.net/esoteric/chef_hello.html
