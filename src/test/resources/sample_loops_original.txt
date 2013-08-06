@@ -1,6 +1,4 @@
-Loops.
-
-derp loop
+Loops sample.
 
 Ingredients.
 2 eggs
