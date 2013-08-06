@@ -3,8 +3,13 @@ import jp.dai1741.parsing.chef._
 import scala.io.Source
 import java.io.{ ByteArrayOutputStream, StringReader }
 
-object ChefSpec extends Specification {
+trait ChefSpecification extends Specification {
   
+  def interpreterName: String
+  def fileSuffix: String
+  def evaler: String ⇒ Unit
+  val ext = ".txt"
+
   def getResouceString(name: String) =
     Source.fromURL(getClass.getResource(name))("UTF-8").getLines mkString "\n"
   
@@ -14,70 +19,51 @@ object ChefSpec extends Specification {
     stream.toString
   }
   
-  def checkRecipe(filePath: String, expected: String, evaler: (String ⇒ Unit)) {
+  def checkRecipe(filePath: String, expected: String) {
     getStdOutIn {
-      evaler(getResouceString(filePath))
+      evaler(getResouceString(filePath + fileSuffix + ext))
     }.replaceAll("""(?<=^|\n) | (?=$|\n)""", "") must be matching expected.r
   }
   
-  def checkJapaneseRecipe = checkRecipe(_: String, _: String, Chef.evalJapanese)
-  def checkOriginalRecipe = checkRecipe(_: String, _: String, Chef.evalOriginal)
-  
   val brokenFibonacciNumbers = "1 0 2 1 3 1 4 1 5 1 6 1 7 1 8 1 9 1 10 1 11 1 12 1 13 1 14 1 15 1 16 1 17 1 18 1 19 1 20 1 21 1 22 1 23 1 24 1 25 1 26 1 27 1 28 1 29 1 30 1 31 1 32 1 33 1 34 1 35 1 36 1 37 1 38 1 39 1 40 1 41 1 42 1 43 1 44 1 45 1 46 1 47 1 48 1 49 1 50 1 51 1 52 1 53 1 54 1 55 1 56 1 57 1 58 1 59 1 60 1 61 1 62 1 63 1 64 1 65 1 66 1 67 1 68 1 69 1 70 1 71 1 72 1 73 1 74 1 75 1 76 1 77 1 78 1 79 1 80 1 81 1 82 1 83 1 84 1 85 1 86 1 87 1 88 1 89 1 90 1 91 1 92 1 93 1 94 1 95 1 96 1 97 1 98 1 99 1 1"
 
-  "Chef runtime with Japanese syntax" should {
+  "Chef runtime with " + interpreterName + " syntax" should {
   
-    "output 'Hello world!' when evaluating 'chef_hello_jp.txt'" in {
-      checkJapaneseRecipe("/chef_hello_jp.txt", "Hello world!")
+    "output 'Hello world!' when evaluating 'chef_hello" + fileSuffix + ext + "'" in {
+      checkRecipe("chef_hello", "Hello world!")
     }
     
-    "output broken fibonacci numbers when evaluating 'chef_fib_jp.txt'" in {
-      checkJapaneseRecipe("/chef_fib_jp.txt", brokenFibonacciNumbers)
+    "output broken fibonacci numbers when evaluating 'chef_fib" + fileSuffix + ext + "'" in {
+      checkRecipe("chef_fib", brokenFibonacciNumbers)
     }
     
     "output correct data for some samples" in {
       List(
-        ("/sample_auxiliary.txt", "10 10 10"),
-        ("/sample_operations.txt", "3 891 1180"),
-        ("/sample_loops.txt", "996"),
-        ("/sample_count10.txt", """1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n"""),
-        ("/sample_instruments.txt", """([1259d ]+\n){2}1 55 1 1\n222""")
+        ("sample_auxiliary", "10 10 10"),
+        ("sample_operations", "3 891 1180"),
+        ("sample_loops", "996"),
+        ("sample_count10", """1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n"""),
+        ("sample_instruments", """([1259d ]+\n){2}1 55 1 1\n222""")
       ).foreach { case (recipe, expected) ⇒
-        checkJapaneseRecipe(recipe, expected)
+        checkRecipe(recipe, expected)
       }
       
       Console.withIn(new StringReader("15\n230\n")) {
-        checkJapaneseRecipe("/sample_io.txt", "245")
+        checkRecipe("sample_io", "245")
       }
     }
-  }
-  
-  // TODO: tidy up
-  "Chef runtime with Original syntax" should {
-    "output 'Hello world!' when evaluating 'chef_hello_original.txt'" in {
-      checkOriginalRecipe("/chef_hello_original.txt", "Hello world!")
-    }
-    
-    "output broken fibonacci numbers when evaluating 'chef_fib_original.txt'" in {
-      checkOriginalRecipe("/chef_fib_original.txt", brokenFibonacciNumbers)
-    }
-    
-    "output correct data for some samples" in {
-      List(
-        ("/sample_auxiliary_original.txt", "10 10 10"),
-        ("/sample_operations_original.txt", "3 891 1180"),
-        ("/sample_loops_original.txt", "996"),
-        ("/sample_count10_original.txt", """1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n"""),
-        ("/sample_instruments_original.txt", """([1259d ]+\n){2}1 55 1 1\n222""")
-      ).foreach { case (recipe, expected) ⇒
-        checkOriginalRecipe(recipe, expected)
-      }
-      
-      Console.withIn(new StringReader("15\n230\n")) {
-        checkOriginalRecipe("/sample_io_original.txt", "245")
-      }
-    }
-    
   }
 
+}
+
+object JapaneseChefSpec extends ChefSpecification {
+  override def interpreterName = "Japanese";
+  override def fileSuffix = "_jp";
+  override def evaler = Chef.evalJapanese
+}
+
+object OriginalChefSpec extends ChefSpecification {
+  override def interpreterName = "Original";
+  override def fileSuffix = "_original";
+  override def evaler = Chef.evalOriginal
 }
