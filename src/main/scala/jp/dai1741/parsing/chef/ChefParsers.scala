@@ -7,19 +7,28 @@ trait ChefParsers {
   def parseRecipe(recipe: String): Recipe
 }
 
-class JapaneseChefParsers extends ChefParsers with JavaTokenParsers {
+trait ChefParsersBase extends JavaTokenParsers {
   
-  override val whiteSpace = """[ \t　]+""".r // do not ignore \n
+  override val whiteSpace = """[ \t　]+""".r  // do not ignore \n
+
+  def recipe: Parser[
+    List[
+      ~[
+        ~[String, (List[Ingredient], List[Operation])],
+        Option[Serve]
+      ]
+    ]
+  ]
   
-  def parseRecipe(recipe: String) = {
-    parseAll(レシピ, recipe) match {
+  def parseRecipe(recipeStr: String) = {
+    parseAll(recipe, recipeStr) match {
       case Success(ls @ (_::_), in) ⇒ {
         val recipes = ls.map {
           case title ~ Pair(ingreds, operations) ~ service ⇒ new PartialRecipe(
             title, ingreds, operations ++ service
           )
         }
-        new Recipe(recipes.head, Map(recipes.map { (r) ⇒ (r.title -> r) }:_*))
+        new Recipe(recipes.head, Map(recipes.map { r ⇒ (r.title -> r) }: _*))
       }
       case Success(Nil, in) ⇒ throw new IllegalRecipeException(
         "Parse succeeded, but no recipe exists")
@@ -27,12 +36,113 @@ class JapaneseChefParsers extends ChefParsers with JavaTokenParsers {
     }
   }
   
+  def newLines = """\n+|\z""".r
+  def integer = wholeNumber ^^ { _.toInt }
+}
+
+class OriginalChefParsers extends ChefParsers with ChefParsersBase {
+  
+  override def recipe =
+    (recipeTitle ~ (comments.? ~> ingredientList <~ cookingTime.? <~ ovenTemperature.? >>
+    method) ~ serves.? <~ newLines).*
+  
+  def recipeTitle = """(?:\.?[^\n.]+)+""".r <~ "." <~ newLines ^^ { _.toLowerCase }
+  def comments = """^(?!Ingredients\.)""".r ~> """(?:[^\n]+\n?)+""".r ~> newLines
+  
+  def ingredientList = "Ingredients.\n" ~> ingredient.+ <~ newLines
+  
+  def ingredient = quantity ~ ingredientName <~ "\n" ^^ { case ((amount ~ iType) ~ name) ⇒
+    Ingredient(name, iType.getOrElse(IngredientType.dry), amount.getOrElse(-1), amount.isDefined)
+  }
+  
+  def ingredientName = """[^\n]+""".r ^^ { _.trim() }
+  
+  def quantity = (integer.? ~ (measure.? ^^ {
+    _.flatMap(identity)
+  }))
+  
+  def measure = measureType.? ~ (liquidMeasures | dryMeasures | genericMeasures) ^^ {
+    case (mtype ~ measure) ⇒ measure orElse mtype
+  }
+  def measureType     = "heaped|level".r     ^^^ IngredientType.dry
+  def liquidMeasures  = "ml|l|dash(es)?".r   ^^^ Some(IngredientType.liquid)
+  def dryMeasures     = "g|kg|pinch(es)?".r  ^^^ Some(IngredientType.dry)
+  def genericMeasures = "cups?|teaspoons?|tablespoons?".r ^^^ None
+  
+  def cookingTime = "Cooking time:" ~> integer <~ """(hours?|minutes?)\.""".r <~ newLines
+  
+  def ovenTemperature =
+    "Pre-heat oven to temperature" ~> integer <~ "degrees Celsius" <~
+    ("(gas mark " <~ integer <~ ")").? <~ "." <~ newLines
+  
+  def method(ingreds: List[Ingredient]) = {
+    val ingredsParser = 
+      ("(?!)" :: ingreds.map(_.name).distinct.sortBy(-_.size).map(Pattern.quote)).mkString("|").r
+    
+    "Method.\n" ~> (methodStatement(ingredsParser) <~ """\.\n?|\n|\z""".r).+ <~ newLines ^^ { (ingreds, _) }
+  }
+  
+  def methodStatement(ingreds: Parser[String]) = {
+  
+    def composite[A, B](func: (A, B) ⇒ Operation): ((~[A, B]) ⇒ Operation) = _ match {
+      case (a ~ b) ⇒ func(a, b)
+    }
+    def ingred = "the".? ~> ingreds
+    
+    "Take" ~> ingred <~ "from refrigerator"            ^^ FromFridge |
+    "Put" ~> ingred ~ intoNthBowl                      ^^ composite(Put) |
+    "Fold" ~> ingred ~ intoNthBowl                     ^^ composite(Fold) |
+    "Add" ~> ingred ~ implicitNthBowl("to")            ^^ composite(Add) |
+    "Remove" ~> ingred ~ implicitNthBowl("from")       ^^ composite(Remove) |
+    "Combine" ~> ingred ~ implicitNthBowl("into")      ^^ composite(Combine) |
+    "Divide" ~> ingred ~ implicitNthBowl("into")       ^^ composite(Divide) |
+    "Add dry ingredients" ~> implicitNthBowl("to")     ^^ AddDries |
+    liquefy ~> ingred                                  ^^ LiquefyIngredient |
+    liquefy ~> "contents of" ~> nthBowl                ^^ LiquefyContents |
+    "Stir" ~> implicitNthBowl() ~ ("for" ~> integer <~ "minutes") ^^ composite(StirWhile) |
+    "Stir" ~> ingred ~ ("into" ~> nthBowl)             ^^ composite(StirWith) |
+    "Mix" ~> implicitNthBowl() <~ "well"                         ^^ Mix |
+    "Clean" ~> nthBowl                                 ^^ Clean |
+    "Pour contents of" ~> nthBowl ~ ("into( the)?".r ~> nth <~ "baking dish") ^^ composite(Pour) |
+    verb ~ ingred                                      ^^ {
+      case (v ~ i) ⇒ Verb(i, v)
+    } |||
+    verb ~> ingred.? ~ ("until" ~> verbed)             ^^ composite(VerbUntil) |||
+    "Serve with " ~> """[^.]+""".r                     ^^ {
+      s ⇒ ServeWith(s.toLowerCase)  // note that recipe names are case-insensitive
+    } |
+    "Set aside"                                        ^^^ SetAside() |
+    "Refrigerate" ~> ("for " ~> integer <~ "hours?".r).?  ^^ Refrigerate
+  }
+
+  def nth = (integer <~ "st|nd|rd|th".r).? ^^ {
+    _.getOrElse(1) - 1
+  }
+  def nthBowl = "the".? ~> nth <~ "mixing bowl"
+  def implicitNthBowl(pre: String = "") = (pre ~> nthBowl).? ^^ {
+    _.getOrElse(0)
+  }
+  def intoNthBowl = "into" ~> nthBowl
+  def liquefy = "Liqu[ei]fy".r
+  
+  // verb loop correspondence will be unchecked, so grammer validation is extremely lazy.
+  def verb = ident
+  def verbed = ident
+  
+  def serves = "Serves" ~> integer <~ "." ^^ Serve
+}
+
+
+class JapaneseChefParsers extends ChefParsers with ChefParsersBase {
+
+  override def recipe = レシピ
+  
   def レシピ =
     (レシピタイトル ~ (レシピコメント.? ~> 材料表 <~ 料理時間.? <~ オーブン温度.? >>
     作り方) ~ 配膳.? <~ 項目区切り).*
   
   def レシピタイトル = 一行の文章 <~ 項目区切り
-  def レシピコメント = "^(?!・材料)".r ~>一段落 <~ 項目区切り
+  def レシピコメント = "^(?!・材料)".r ~> 一段落 <~ 項目区切り
   
   def 材料表 = "・材料\n" ~> 材料定義.+ <~ 項目区切り
   
@@ -116,9 +226,8 @@ class JapaneseChefParsers extends ChefParsers with JavaTokenParsers {
   
   def 一行の文章 = """[^\n]+""".r
   def 一段落 = """(?:[^\n]+\n?)+""".r
-  def 項目区切り = """\n+|\z""".r
-  def 整数 = decimalNumber ^^ { _.toInt }
-  
+  def 項目区切り = newLines
+  def 整数 = integer
 }
 
 class VerboseJapaneseChefParsers extends JapaneseChefParsers {
